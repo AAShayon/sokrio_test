@@ -19,7 +19,7 @@ dependencies:
   # Networking
   dio: ^5.4.0
   connectivity_plus: ^5.0.2
-  
+
   # Security
   flutter_secure_storage: ^8.0.0
   package_info_plus: ^4.2.0
@@ -58,7 +58,8 @@ dev_dependencies:
   freezed: ^2.4.6
   json_serializable: ^6.7.1
   drift_dev: ^2.14.1
-  
+  flutter_launcher_icons: ^0.13.1
+
   # Testing
   mockito: ^5.4.4
   build_test: ^2.1.7
