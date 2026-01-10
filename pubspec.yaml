@@ -19,6 +19,11 @@ dependencies:
   # Networking
   dio: ^5.4.0
   connectivity_plus: ^5.0.2
+  
+  # Security
+  flutter_secure_storage: ^8.0.0
+  package_info_plus: ^4.2.0
+  crypto: ^3.0.3
 
   # Functional Programming (Error Handling)
   dartz: ^0.10.1
