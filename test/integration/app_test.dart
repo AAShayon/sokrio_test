@@ -53,7 +53,7 @@ void main() {
         (failure) => fail('Expected success but got failure'),
         (users) {
           expect(users.length, 2);
-          expect(users[0].firstName, 'John');
+          expect(users[0].firstName, 'George');
         },
       );
       verify(mockUserRepository.getPagedUsers(1)).called(1);
@@ -68,7 +68,7 @@ void main() {
           firstName: 'George',
           lastName: 'Bluth',
           avatar: 'https://reqres.in/img/faces/1-image.jpg',
-          ),
+        ),
         TestUser(
           id: 2,
           email: 'janet.weaver@reqres.in',
@@ -90,7 +90,7 @@ void main() {
         (failure) => fail('Expected success but got failure'),
         (users) {
           expect(users.length, 1);
-          expect(users[0].firstName, 'John');
+          expect(users[0].firstName, 'George');
         },
       );
       verify(mockUserRepository.searchUsersLocal('John')).called(1);
