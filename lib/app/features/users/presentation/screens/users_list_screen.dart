@@ -81,7 +81,7 @@ class _UsersListScreenState extends ConsumerState<UsersListScreen> {
             ],
           ),
         ),
-        success: (users, hasMore, isOffline, isLoadingMore, _) {
+        success: (users, hasMore, isOffline, isLoadingMore,_) {
           if (users.isEmpty && !isLoadingMore) {
             return const Center(child: Text('No users found.'));
           }

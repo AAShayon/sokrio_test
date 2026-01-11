@@ -18,13 +18,15 @@ class UsersNotifier extends StateNotifier<UsersState> {
     // Subscribe to Drift Stream for offline-first data
     _usersSubscription =
         _ref.read(watchUsersUseCaseProvider).call().listen((users) {
-      if (state is! Success) {
+      // Only update if we have data OR if we're in success state (offline mode)
+      // Don't show empty success state during initial loading
+      if (users.isNotEmpty && state is! Success) {
         state = UsersState.success(
           users: users,
           hasMore: true,
           isOffline: false,
         );
-      } else {
+      } else if (state is Success) {
         final currentState = state as Success;
         state = currentState.copyWith(users: users);
       }
@@ -47,22 +49,45 @@ class UsersNotifier extends StateNotifier<UsersState> {
     final result = await _ref.read(getPagedUsersUseCaseProvider).call(page);
 
     result.fold(
-      (failure) {
-        if (isFirstLoad &&
-            (currentState is! Success || currentState.users.isEmpty)) {
-          if (failure is NoNetworkFailure) {
-            state = UsersState.error(failure.message);
-          } else {
-            state = UsersState.error(failure.message);
-          }
+      (failure) async {
+        if (failure is NoNetworkFailure && isFirstLoad) {
+          // When no network, check local storage for cached data
+          final cachedUsers =
+              await _ref.read(searchUsersLocalUseCaseProvider).call('');
+
+          cachedUsers.fold(
+            (cacheFailure) {
+              // No cached data available, show error
+              state = UsersState.error(failure.message);
+            },
+            (users) {
+              if (users.isNotEmpty) {
+                // Show cached data with offline banner
+                state = UsersState.success(
+                  users: users,
+                  hasMore: false,
+                  isOffline: true,
+                  isLoadingMore: false,
+                  currentPage: 1,
+                );
+              } else {
+                // No cached data, show error
+                state = UsersState.error(failure.message);
+              }
+            },
+          );
         } else if (currentState is Success) {
           state = currentState.copyWith(
             isLoadingMore: false,
             isOffline: true,
           );
+        } else {
+          // Other failures on first load
+          state = UsersState.error(failure.message);
         }
       },
       (newUsers) {
+        // Always update state when we get fresh data from network
         if (state is Success) {
           final s = state as Success;
           state = s.copyWith(
@@ -70,6 +95,16 @@ class UsersNotifier extends StateNotifier<UsersState> {
             currentPage: page,
             hasMore: newUsers.length >= 10,
             isOffline: false,
+            users: newUsers,
+          );
+        } else {
+          // First successful fetch from network
+          state = UsersState.success(
+            users: newUsers,
+            hasMore: newUsers.length >= 10,
+            isOffline: false,
+            isLoadingMore: false,
+            currentPage: page,
           );
         }
       },
