@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'users_providers.dart';
 import 'users_state.dart';
 import '../../domain/entities/user.dart';
@@ -8,6 +9,8 @@ import '../../../../core/error/failures.dart';
 class UsersNotifier extends StateNotifier<UsersState> {
   final Ref _ref;
   StreamSubscription<List<User>>? _usersSubscription;
+  StreamSubscription<ConnectivityResult>? _connectivitySubscription;
+  bool _isCurrentlyOnline = true;
 
   UsersNotifier(this._ref) : super(const UsersState.initial()) {
     _init();
@@ -15,25 +18,56 @@ class UsersNotifier extends StateNotifier<UsersState> {
 
   void _init() {
     state = const UsersState.loading();
+
+    _connectivitySubscription =
+        Connectivity().onConnectivityChanged.listen((result) {
+      _handleConnectivityChange(result);
+    });
+
+    _checkInitialConnectivity();
+
     // Subscribe to Drift Stream for offline-first data
     _usersSubscription =
         _ref.read(watchUsersUseCaseProvider).call().listen((users) {
-      // Only update if we have data OR if we're in success state (offline mode)
-      // Don't show empty success state during initial loading
       if (users.isNotEmpty && state is! Success) {
         state = UsersState.success(
           users: users,
           hasMore: true,
-          isOffline: false,
+          isOffline: !_isCurrentlyOnline,
         );
       } else if (state is Success) {
         final currentState = state as Success;
         state = currentState.copyWith(users: users);
       }
     });
-
-    // Initial fetch from remote
     fetchPage(1);
+  }
+
+  Future<void> _checkInitialConnectivity() async {
+    final connectivity = Connectivity();
+    final result = await connectivity.checkConnectivity();
+    _isCurrentlyOnline = result != ConnectivityResult.none;
+  }
+
+  void _handleConnectivityChange(ConnectivityResult result) {
+    final isOnline = result != ConnectivityResult.none;
+
+    if (_isCurrentlyOnline != isOnline) {
+      _isCurrentlyOnline = isOnline;
+
+      if (isOnline) {
+        if (state is Success) {
+          refresh();
+        }
+      } else {
+        if (state is Success) {
+          final currentState = state as Success;
+          if (currentState.users.isNotEmpty) {
+            state = currentState.copyWith(isOffline: true);
+          }
+        }
+      }
+    }
   }
 
   Future<void> fetchPage(int page) async {
@@ -51,18 +85,15 @@ class UsersNotifier extends StateNotifier<UsersState> {
     result.fold(
       (failure) async {
         if (failure is NoNetworkFailure && isFirstLoad) {
-          // When no network, check local storage for cached data
           final cachedUsers =
               await _ref.read(searchUsersLocalUseCaseProvider).call('');
 
           cachedUsers.fold(
             (cacheFailure) {
-              // No cached data available, show error
-              state = UsersState.error(failure.message);
+              state = UsersState.error(cacheFailure.message);
             },
             (users) {
               if (users.isNotEmpty) {
-                // Show cached data with offline banner
                 state = UsersState.success(
                   users: users,
                   hasMore: false,
@@ -79,15 +110,13 @@ class UsersNotifier extends StateNotifier<UsersState> {
         } else if (currentState is Success) {
           state = currentState.copyWith(
             isLoadingMore: false,
-            isOffline: true,
+            isOffline: !_isCurrentlyOnline,
           );
         } else {
-          // Other failures on first load
           state = UsersState.error(failure.message);
         }
       },
       (newUsers) {
-        // Always update state when we get fresh data from network
         if (state is Success) {
           final s = state as Success;
           state = s.copyWith(
@@ -98,7 +127,6 @@ class UsersNotifier extends StateNotifier<UsersState> {
             users: newUsers,
           );
         } else {
-          // First successful fetch from network
           state = UsersState.success(
             users: newUsers,
             hasMore: newUsers.length >= 10,
@@ -126,29 +154,26 @@ class UsersNotifier extends StateNotifier<UsersState> {
 
   Future<void> search(String query) async {
     if (query.isEmpty) {
-      // Re-fetch all pages when clearing search
       await _refetchAllPages();
       return;
     }
 
-    // Search through all cached data (not just current page)
     final result = await _ref.read(searchUsersLocalUseCaseProvider).call(query);
     result.fold(
-      (failure) => null, // Handle search error if needed
+      (failure) => null,
       (results) {
         if (state is Success) {
           final s = state as Success;
           state = s.copyWith(
             users: results,
-            hasMore: false, // Search results are final, no more pagination
-            isOffline: false,
+            hasMore: false,
+            isOffline: !_isCurrentlyOnline,
           );
         }
       },
     );
   }
 
-  // Helper method to fetch all pages for search completeness
   Future<void> _refetchAllPages() async {
     List<User> allUsers = [];
     int page = 1;
@@ -163,24 +188,20 @@ class UsersNotifier extends StateNotifier<UsersState> {
         allUsers.addAll(newUsers);
         page++;
 
-        // Stop if we have fewer than 10 users (indicates end)
         if (newUsers.length < 10) break;
 
-        // Safety limit to prevent infinite loop
         if (page > 10) break;
       }
 
-      // Update state with all fetched users
       if (state is Success) {
         final s = state as Success;
         state = s.copyWith(
           users: allUsers,
           hasMore: false,
-          isOffline: false,
+          isOffline: !_isCurrentlyOnline,
         );
       }
     } catch (e) {
-      // Handle errors gracefully
       return;
     }
   }
@@ -188,6 +209,7 @@ class UsersNotifier extends StateNotifier<UsersState> {
   @override
   void dispose() {
     _usersSubscription?.cancel();
+    _connectivitySubscription?.cancel();
     super.dispose();
   }
 }
