@@ -209,3 +209,5 @@ flutter test --target=test/widget_test.dart
 # Run integration tests
 flutter drive --target=integration_test/app_test.dart
 ```
+
+- **APP Link Demo**: [Sokrio People Pulse](https://drive.google.com/file/d/1XxHjmirOe0pcq5S1mV-gfPC8qHhyzVE5/view?usp=sharing)
